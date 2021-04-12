@@ -1,0 +1,28 @@
+# escape=`
+
+FROM mcr.microsoft.com/dotnet/framework/sdk:4.8 AS build
+WORKDIR /app
+COPY . .
+
+# handle private repo credentials
+ARG FEED_ACCESSTOKEN
+RUN nuget sources update -name PrivateTestRepo -source https://gandalan.pkgs.visualstudio.com/_packaging/private_test_repo/nuget/v3/index.json -username PATForPackages -password %FEED_ACCESSTOKEN%
+
+# Restore
+RUN nuget restore NuGetBug.sln
+
+# should be Debug or Release
+ARG CONFIGURATION
+# Build & publish
+ARG SolutionDir="C:\app\"
+RUN msbuild /p:Configuration=%CONFIGURATION% /p:DeployOnBuild=true /p:PublishProfile=FolderProfile.pubxml NuGetBug.WebApi\NuGetBug.WebApi.csproj
+
+FROM mcr.microsoft.com/dotnet/aspnet:5.0 as runtime
+
+WORKDIR /inetpub/wwwroot
+ARG CONFIGURATION
+COPY --from=build /app/NuGetBug.WebApi/bin/Release/Publish/. ./
+
+EXPOSE 80 443
+
+ENTRYPOINT ["C:\\ServiceMonitor.exe", "w3svc"]
