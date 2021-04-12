@@ -1,12 +1,23 @@
 # escape=`
 
 FROM mcr.microsoft.com/dotnet/framework/sdk:4.8 AS build
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+# Change user to workaround https://github.com/microsoft/artifacts-credprovider/issues/201
+USER ContainerAdministrator
+# Install the cred provider
+RUN Invoke-WebRequest https://raw.githubusercontent.com/microsoft/artifacts-credprovider/master/helpers/installcredprovider.ps1 -OutFile installcredprovider.ps1; `
+    .\installcredprovider.ps1; `
+    del installcredprovider.ps1
+USER ContainerUser
+
 WORKDIR /app
 COPY . .
 
 # handle private repo credentials
 ARG FEED_ACCESSTOKEN
-RUN nuget sources update -name PrivateTestRepo -source https://gandalan.pkgs.visualstudio.com/_packaging/private_test_repo/nuget/v3/index.json -username PATForPackages -password %FEED_ACCESSTOKEN%
+ENV VSS_NUGET_EXTERNAL_FEED_ENDPOINTS="{`"endpointCredentials`": [{`"endpoint`":`"https://gandalan.pkgs.visualstudio.com/_packaging/private_test_repo/nuget/v3/index.json`", `"username`":`"PATForPackages`", `"password`":`"${FEED_ACCESSTOKEN}`"}]}"
 
 # Restore
 RUN nuget restore NuGetBug.sln
